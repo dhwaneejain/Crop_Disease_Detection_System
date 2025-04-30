@@ -1,96 +1,184 @@
 import streamlit as st
 import tensorflow as tf
 import numpy as np
-
-
-#Tensorflow Model Prediction
-import tensorflow as tf
-import numpy as np
+from PIL import Image
+import pandas as pd
+import datetime
 import os
+import cv2
 
-#Tensorflow Model Prediction
-def model_prediction(test_image):
-    model_path = os.path.join(os.path.dirname(__file__), 'trained_model.h5')
+# ---------------------------------
+# 🌿 Set page configuration
+# ---------------------------------
+st.set_page_config(page_title="Plant Disease Detector", layout="centered")
+
+# ---------------------------------
+# 🎨 CSS Styling
+# ---------------------------------
+st.markdown("""
+    <style>
+        body { background-color: #f4fff6; font-family: "Segoe UI", sans-serif; }
+        h1, h2, h3 { color: #22793c; }
+        .stButton > button {
+            background-color: #4CAF50; color: white; border-radius: 8px;
+        }
+        .stTextInput > div > input {
+            border-radius: 6px;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# ---------------------------------
+# 🧠 Load Model
+# ---------------------------------
+@st.cache_resource
+def load_model():
+    model_path = 'trained_model.h5'
     if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Model file not found at: {model_path}")
-    
-    model = tf.keras.models.load_model(model_path)
-    image = tf.keras.preprocessing.image.load_img(test_image,target_size=(128,128))
-    input_arr = tf.keras.preprocessing.image.img_to_array(image)
-    input_arr = np.array([input_arr]) #convert single image to batch
-    predictions = model.predict(input_arr)
-    return np.argmax(predictions) #return index of max element
+        st.error("Model file not found. Please add 'trained_model.h5' to the app directory.")
+        return None
+    return tf.keras.models.load_model(model_path)
 
-#Sidebar
-st.sidebar.title("Dashboard")
-app_mode = st.sidebar.selectbox("Select Page",["Home","About","Disease Recognition"])
+model = load_model()
 
-#Main Page
-if(app_mode=="Home"):
-    st.header("PLANT DISEASE RECOGNITION SYSTEM")
-    image_path = "home_page.jpeg"
-    st.image(image_path,use_column_width=True)
-    st.markdown("""
-    Welcome to the Plant Disease Recognition System! 🌿🔍
-    
-    Our mission is to help in identifying plant diseases efficiently. Upload an image of a plant, and our system will analyze it to detect any signs of diseases. Together, let's protect our crops and ensure a healthier harvest!
+# ---------------------------------
+# 🧠 Prediction Function
+# ---------------------------------
+def predict_image(image):
+    image = Image.open(image).convert("RGB")
+    image = image.resize((128, 128))
+    img_array = tf.keras.utils.img_to_array(image)
+    img_array = np.expand_dims(img_array, axis=0)
+    predictions = model.predict(img_array)
+    predicted_class = class_names[np.argmax(predictions)]
+    confidence = np.max(predictions)
+    return predicted_class, confidence
 
-    ### How It Works
-    1. **Upload Image:** Go to the **Disease Recognition** page and upload an image of a plant with suspected diseases.
-    2. **Analysis:** Our system will process the image using advanced algorithms to identify potential diseases.
-    3. **Results:** View the results and recommendations for further action.
+# ---------------------------------
+# 🌿 Class Labels + Actions
+# ---------------------------------
+class_names = [
+    'Apple___Apple_scab', 'Apple___Black_rot', 'Apple___Cedar_apple_rust', 'Apple___healthy',
+    'Blueberry___healthy', 'Cherry_(including_sour)___Powdery_mildew',
+    'Cherry_(including_sour)___healthy', 'Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot',
+    'Corn_(maize)___Common_rust_', 'Corn_(maize)___Northern_Leaf_Blight', 'Corn_(maize)___healthy',
+    'Grape___Black_rot', 'Grape___Esca_(Black_Measles)', 'Grape___Leaf_blight_(Isariopsis_Leaf_Spot)',
+    'Grape___healthy', 'Orange___Haunglongbing_(Citrus_greening)', 'Peach___Bacterial_spot',
+    'Peach___healthy', 'Pepper,_bell___Bacterial_spot', 'Pepper,_bell___healthy',
+    'Potato___Early_blight', 'Potato___Late_blight', 'Potato___healthy',
+    'Raspberry___healthy', 'Soybean___healthy', 'Squash___Powdery_mildew',
+    'Strawberry___Leaf_scorch', 'Strawberry___healthy', 'Tomato___Bacterial_spot',
+    'Tomato___Early_blight', 'Tomato___Late_blight', 'Tomato___Leaf_Mold',
+    'Tomato___Septoria_leaf_spot', 'Tomato___Spider_mites Two-spotted_spider_mite',
+    'Tomato___Target_Spot', 'Tomato___Tomato_Yellow_Leaf_Curl_Virus', 'Tomato___Tomato_mosaic_virus',
+    'Tomato___healthy'
+]
 
-    ### Why Choose Us?
-    - **Accuracy:** Our system utilizes state-of-the-art machine learning techniques for accurate disease detection.
-    - **User-Friendly:** Simple and intuitive interface for seamless user experience.
-    - **Fast and Efficient:** Receive results in seconds, allowing for quick decision-making.
+# Dummy suggestions
+suggested_actions = {
+    label: ["Use fungicide", "Remove infected leaves"] if "healthy" not in label else ["No action needed", "Keep monitoring"]
+    for label in class_names
+}
 
-    ### Get Started
-    Click on the **Disease Recognition** page in the sidebar to upload an image and experience the power of our Plant Disease Recognition System!
+# ---------------------------------
+# 🚀 Navigation
+# ---------------------------------
+st.sidebar.title("Navigation")
+page = st.sidebar.radio("Go to", ["🏠 Home", "📖 About", "📁 Upload & Predict", "📷 Camera & Predict"])
 
-    ### About Us
-    Learn more about the project, our team, and our goals on the **About** page.
+# ---------------------------------
+# 🏠 Home Page
+# ---------------------------------
+if page == "🏠 Home":
+    st.title("🌿 Welcome to Plant Disease Detector")
+    st.write("This app helps you detect plant diseases using AI-powered image classification.")
+    st.image(r"C:\Users\Nandini Sharma\Downloads\Minor project\Minor project\dataset\home_page.jpeg", use_container_width=True)
+    st.markdown("---")
+    st.header("📬 Feedback")
+    with st.form("feedback_form"):
+        name = st.text_input("Your Name")
+        comments = st.text_area("Your Feedback")
+        submitted = st.form_submit_button("Submit Feedback")
+        if submitted:
+            if name and comments:
+                feedback_file = "feedback.xlsx"
+                feedback_data = {"Name": [name], "Feedback": [comments], "Time": [datetime.datetime.now()]}
+                df = pd.DataFrame(feedback_data)
+                if os.path.exists(feedback_file):
+                    old_df = pd.read_excel(feedback_file)
+                    df = pd.concat([old_df, df], ignore_index=True)
+                df.to_excel(feedback_file, index=False)
+                st.success("✅ Feedback submitted successfully!")
+            else:
+                st.warning("Please fill in all fields.")
+
+# ---------------------------------
+# 📖 About Page
+# ---------------------------------
+elif page == "📖 About":
+    st.title("📖 About This App")
+    st.write("""
+        This application is developed as a final year BCA project.  
+        It uses a Convolutional Neural Network (CNN) trained on the **PlantVillage dataset**  
+        to identify **38 types of plant diseases and healthy leaves**.
+        
+        Technologies used:
+        - Python 🐍
+        - TensorFlow / Keras 🧠
+        - OpenCV 📷
+        - Streamlit 💻
+        - Pandas & Excel for feedback 📊
     """)
 
-#About Project
-elif(app_mode=="About"):
-    st.header("About")
-    st.markdown("""
-                #### About Dataset
-                This dataset is recreated using offline augmentation from the original dataset.The original dataset can be found on this github repo.
-                This dataset consists of about 87K rgb images of healthy and diseased crop leaves which is categorized into 38 different classes.The total dataset is divided into 80/20 ratio of training and validation set preserving the directory structure.
-                A new directory containing 33 test images is created later for prediction purpose.
-                #### Content
-                1. train (43444 images)
-                2. test (33 images)
-                3. validation (10861 images)
+# ---------------------------------
+# 📁 Upload & Predict Page
+# ---------------------------------
+elif page == "📁 Upload & Predict":
+    st.title("📁 Upload Leaf Image")
+    uploaded_file = st.file_uploader("Upload an image...", type=["jpg", "jpeg", "png"])
 
-                """)
+    if uploaded_file is not None:
+        st.image(uploaded_file, caption="Uploaded Image", use_container_width=True)
+        if st.button("Predict"):
+            label, confidence = predict_image(uploaded_file)
+            st.success(f"**Prediction:** {label}")
+            st.info(f"**Confidence:** {confidence*100:.2f}%")
+            st.markdown("### Suggested Actions:")
+            for act in suggested_actions[label]:
+                st.write(f"- {act}")
 
-#Prediction Page
-elif(app_mode=="Disease Recognition"):
-    st.header("Disease Recognition")
-    test_image = st.file_uploader("Choose an Image:")
-    if(st.button("Show Image")):
-        st.image(test_image,width=4,use_column_width=True)
-    #Predict button
-    if(st.button("Predict")):
-        with st.spinner("Please wait.."):
-            st.write("Our Prediction")
-            result_index = model_prediction(test_image)
-            #Reading Labels
-            class_name = ['Apple___Apple_scab', 'Apple___Black_rot', 'Apple___Cedar_apple_rust', 'Apple___healthy',
-                    'Blueberry___healthy', 'Cherry_(including_sour)___Powdery_mildew', 
-                    'Cherry_(including_sour)___healthy', 'Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot', 
-                    'Corn_(maize)___Common_rust_', 'Corn_(maize)___Northern_Leaf_Blight', 'Corn_(maize)___healthy', 
-                    'Grape___Black_rot', 'Grape___Esca_(Black_Measles)', 'Grape___Leaf_blight_(Isariopsis_Leaf_Spot)', 
-                    'Grape___healthy', 'Orange___Haunglongbing_(Citrus_greening)', 'Peach___Bacterial_spot',
-                    'Peach___healthy', 'Pepper,_bell___Bacterial_spot', 'Pepper,_bell___healthy', 
-                    'Potato___Early_blight', 'Potato___Late_blight', 'Potato___healthy', 
-                    'Raspberry___healthy', 'Soybean___healthy', 'Squash___Powdery_mildew', 
-                    'Strawberry___Leaf_scorch', 'Strawberry___healthy', 'Tomato___Bacterial_spot', 
-                    'Tomato___Early_blight', 'Tomato___Late_blight', 'Tomato___Leaf_Mold', 
-                    'Tomato___Septoria_leaf_spot', 'Tomato___Spider_mites Two-spotted_spider_mite', 
-                    'Tomato___Target_Spot', 'Tomato___Tomato_Yellow_Leaf_Curl_Virus', 'Tomato___Tomato_mosaic_virus',
-                      'Tomato___healthy']
-        st.success("Model is Predicting it's a {}".format(class_name[result_index]))
+# ---------------------------------
+# 📷 Camera & Predict Page
+# ---------------------------------
+elif page == "📷 Camera & Predict":
+    st.title("📷 Capture via Camera")
+    captured_image = st.camera_input("Take a picture")
+
+    if captured_image is not None:
+        st.image(captured_image, caption="Captured Image", use_column_width=True)
+        if st.button("Predict"):
+            label, confidence = predict_image(captured_image)
+            st.success(f"**Prediction:** {label}")
+            st.info(f"**Confidence:** {confidence*100:.2f}%")
+            st.markdown("### Suggested Actions:")
+            for act in suggested_actions[label]:
+                st.write(f"- {act}")
+
+    st.markdown("---")
+    st.header("📬 Feedback")
+    with st.form("camera_feedback_form"):
+        name = st.text_input("Your Name", key="camera_name")
+        comments = st.text_area("Your Feedback", key="camera_comments")
+        submitted = st.form_submit_button("Submit Feedback")
+        if submitted:
+            if name and comments:
+                feedback_file = "feedback.xlsx"
+                feedback_data = {"Name": [name], "Feedback": [comments], "Time": [datetime.datetime.now()]}
+                df = pd.DataFrame(feedback_data)
+                if os.path.exists(feedback_file):
+                    old_df = pd.read_excel(feedback_file)
+                    df = pd.concat([old_df, df], ignore_index=True)
+                df.to_excel(feedback_file, index=False)
+                st.success("✅ Feedback submitted successfully!")
+            else:
+                st.warning("Please fill in all fields.")
